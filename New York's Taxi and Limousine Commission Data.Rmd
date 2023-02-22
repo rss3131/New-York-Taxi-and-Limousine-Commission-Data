@@ -1,0 +1,439 @@
+RAGHVENDRA SINGH SHAKTAWAT
+NEW YORK'S TAXI AND LIMOUSINE COMMISSION (TLC) DATA                                                                
+
+
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(psych)
+library(scales)
+library(corrplot)
+```
+
+
+#Data Understanding  
+•Here, I loaded the NYC Green Taxi Trip Records data directly from the URLinto a data frame or tibble. •Data exploration: I explored the data to identify any patterns and analyzed the relationships between the features and the target variable i.e. tip amount. I also analyzed: 1) the distribution, 2)  the correlations 3) missing values and 4) outliers —provide supporting visualizations and explained all my steps.  
+•Feature selection: I identifed the features/variables that are good indicators and should be used to predict the tip amount. This step involves selecting a subset of the features that will be used to build the predictive model.
+•Feature engineering: I created a new feature and analyzed its effect on the target variable (e.g.the tip amount). I also ensured to calculate the correlation coefficient and also used visualizations to support my analysis. Then, I summarized my findings and determined if the new feature is a good indicator to predict the tip amount. 
+
+```{r}
+records_df <- read.csv("https://s3.amazonaws.com/nyc-tlc/trip+data/green_tripdata_2020-02.csv")
+head(records_df)
+```
+
+This data set consists of the records of New York City green taxi trips in which there are 398632 Rose and 20 columns present.
+
+•Data exploration:I explored the data to identify any patterns and analyze the relationships between the features and the target variable i.e. tip amount. Then, I also analyzed: 1) the distribution, 2)  the correlations 3) missing values and 4) outliers — to provide supporting visualizations and explained all my steps.  
+
+Following are the names of the 20 columns that are present in this data set:
+
+```{r}
+#Names of different columns present in the data set.
+colnames(records_df)
+```
+
+```{r}
+glimpse(records_df)
+```
+
+When looking at the glimpse of the data set, there are multiple categories that are present in a particular column. For example, the rate code ID column has six different final rate codes which are in effect at the end of the trip. There are six different modes of payment ranging from credit card, cash to unknown modes of payment. Street hill and dispatch are the two different codes which indicate whether the trip was a street hail or dispatch based on the meter rate in use by the driver.
+
+There are a lot of values which are not available in this particular data set. The following are some of the columns which display the number of NA values present in them. The column named ehail_fee possess 398632 NA values which does not contribute anything to the records_df data frame
+
+```{r}
+#Missing values in data
+colSums(is.na(records_df))
+```
+
+```{r}
+str(records_df)
+```
+
+Looking at the structure of the records_df data frame, there are integers, characters and numeric values present in the data set among which the majority of the columns possess integer and numerical values.
+
+```{r}
+records_df %>% count(VendorID)
+records_df %>% count(RatecodeID)
+records_df %>% count(trip_type)
+records_df %>% count(store_and_fwd_flag)
+records_df %>% count(passenger_count)
+records_df %>% count(payment_type)
+records_df %>% count(congestion_surcharge)
+```
+
+In the above R chunk, the total count of those columns which have multiple features is mentioned and they are represented in the form of bar charts below.
+
+```{r}
+ggplot(records_df, aes(VendorID)) + geom_bar(fill = "blue", color = "green") + labs( x = "VendorID ( 1 = Creative Mobile Technologies, LLC, 2 = VeriFone Inc. )", y = "Count of passengers") + ggtitle("LPEP provider that provided the record") + theme_classic()
+
+ggplot(records_df, aes(trip_type)) + geom_bar(fill = "yellow", color = "blue") + labs( x = "Trip type ( 1 = Street-hail, 2 = Dispatch )", y = "Count of passengers") + ggtitle("Type of the trip") + theme_classic()
+
+ggplot(records_df, aes(store_and_fwd_flag)) + geom_bar(fill = "orange", color = "black") + labs( x = "Trip type ( N =  Not a store and forward trip, Y = Store and forward trip )", y = "Count of passengers") + theme_classic()
+
+ggplot(records_df, aes(payment_type)) + geom_bar(fill = "red", color = "green") + labs( x = "Payment methods ( 1 = Credit card, 2 = Cash, 3 = No charge, 4 = Dispute, 5 = Unknown )", y = "Count of passengers") + ggtitle("Trips by types of Payment") + theme_classic()
+```
+
+In the bar chart of vendor ID, there are two codes which indicate the lpep provider that provided the record. From the visualization, it is clearly visible that Verifone. Inc which has level two has the maximum count of passengers at 265035. When it comes to the type of the trip, Street hail is preferred by the maximum number of passengers with a count of 310466. 
+When we look at the histogram of trips by types of payment, there are multiple modes of payment among which credit card is the most preferred method of payment by the maximum number of passengers which is having account of 176530.
+
+```{r}
+get_date = function(t){
+  a = strsplit(as.character(t),"\\ ")[[1]]
+  b = as.numeric(strsplit(as.character(a[2]),"\\:")[[1]])
+  c = as.numeric(strsplit(as.character(a[1]),"\\-")[[1]])
+  hour = b[1]
+  minute = b[2]
+  day = c[3]
+  month = c[2]
+  return(c(month,day,hour,minute))
+}
+```
+
+After displaying the data in the form of bar charts, I used the lubridate package to split lpep_pickup_datetime and lpep_dropoff_datetime columns into separate columns of month, days, hours and minutes.
+
+```{r}
+pick_up = as.data.frame(t(sapply(records_df$lpep_pickup_datetime,get_date)))
+colnames(pick_up) = c("pickup_month","pickup_day","pickup_hour","pickup_minute")
+```
+
+```{r}
+drop_off = as.data.frame(t(sapply(records_df$lpep_dropoff_datetime,get_date)))
+colnames(drop_off) = c("dropoff_month","dropoff_day","dropoff_hour","dropoff_minute")
+```
+
+I also converted different non-numeric columns into numeric ones below.
+
+```{r}
+records_df = cbind(records_df,pick_up,drop_off)
+records_df$VendorID <- as.numeric(records_df$VendorID)
+records_df$RatecodeID <- as.numeric(records_df$RatecodeID)
+records_df$PULocationID <- as.numeric(records_df$PULocationID)
+records_df$DOLocationID <- as.numeric(records_df$DOLocationID)
+records_df$passenger_count <- as.numeric(records_df$passenger_count)
+records_df$payment_type <- as.numeric(records_df$payment_type)
+records_df$trip_type <- as.numeric(records_df$trip_type)
+```
+
+```{r}
+correlation_records <- cor(records_df[c("VendorID","RatecodeID","PULocationID","DOLocationID","passenger_count","trip_distance","fare_amount","extra","mta_tax","tip_amount","tolls_amount","improvement_surcharge","total_amount","payment_type","trip_type","congestion_surcharge","pickup_month","pickup_day","pickup_hour","pickup_minute","dropoff_month","dropoff_day","dropoff_hour")],method = "pearson",use = "complete.obs")
+
+correlation_records
+```
+
+Here, I represented the correlation between the different columns of the records_df data frame by using Pearson's method. From the correlation plot, it is evident that the Rate code ID and trip type shares the maximum correlation of 0.8901620705 in the entire data frame. The correlation between fare amount and total amount columns also possess a strong correlation. The strongest correlation is indicated by the dark blue square boxes and the weakest correlation is indicated by red boxes in the correlation plot. One of the weakest correlations is between trip type and MTA tax columns and has a value of -0.7403146945.
+
+```{r}
+corrplot(correlation_records, method="color")
+```
+
+
+Following is the summary of the records_df data frame. There are some values present in specific columns which have a maximum value that is much more than the usual values of that column. For example, in the tip amount column, the maximum tip that has been given to a taxi driver is 641.200. Such high values are represented by the box plots below in the form of visualization for outliers.
+
+```{r}
+summary(records_df)
+```
+
+```{r}
+ggplot(records_df, aes(fare_amount)) + geom_boxplot(outlier.colour = "red", color = "blue") + labs(x = "fare_amount")
+
+ggplot(records_df, aes(PULocationID)) + geom_boxplot(outlier.colour = "blue", color = "red") + labs(x = "PULocationID")
+
+ggplot(records_df, aes(extra)) + geom_boxplot(outlier.colour = "blue", color = "orange") + labs(x = "extra")
+
+ggplot(records_df, aes(DOLocationID)) + geom_boxplot(outlier.colour = "blue", color = "green") + labs(x = "DOLocationID")
+
+ggplot(records_df, aes(trip_distance)) + geom_boxplot(outlier.colour = "blue", color = "yellow") + labs(x = "trip_distance")
+
+ggplot(records_df, aes(mta_tax)) + geom_boxplot(outlier.colour = "blue", color = "yellow") + labs(x = "mta_tax")
+
+ggplot(records_df, aes(tolls_amount)) + geom_boxplot(outlier.colour = "blue", color = "pink") + labs(x = "tolls_amount")
+
+ggplot(records_df, aes(total_amount)) + geom_boxplot(outlier.colour = "blue", color = "black") + labs(x = "total_amount")
+
+ggplot(records_df, aes(congestion_surcharge)) + geom_boxplot(outlier.colour = "black", color = "red") + labs(x = "congestion_surcharge")
+
+ggplot(records_df, aes(tip_amount)) + geom_boxplot(outlier.colour = "blue", color = "brown") + labs(x = "tip_amount")
+
+```
+
+- In the fare amount box plot, the outlier is 458 i.e., the maximum value of the column. 
+- The maximum value of PU location ID column is 265.
+- For the box plot of detecting outliers, there in the extra column the maximum value is 16.7400.
+- The outlier of trip distance box plot is having a value of 159907.16
+- In the tolls amount box plot, the outline is 33.6200.
+- The total amount column has an outlier value of 651.50.
+- In the box plot of tip amount, the outlier is indicated by the blue point is having a value of 641.2 0.
+
+```{r}
+model_records <- lm(tip_amount ~ VendorID+RatecodeID+PULocationID+DOLocationID+passenger_count+trip_distance+fare_amount+extra+mta_tax+tip_amount+tolls_amount+improvement_surcharge+total_amount+payment_type+trip_type+congestion_surcharge+pickup_month+pickup_day+pickup_hour+pickup_minute+dropoff_month+dropoff_day+dropoff_hour, data = records_df)
+model_records
+```
+
+```{r}
+summary(model_records)
+```
+
+Here is the linear regression model of tip amount with the other columns present in the records_df data frame are indicated. If we look at the summary of the model, the multiple and adjusted r squared value is .98 and the P value is 2.2e-16.
+
+For selecting the particular features that are necessary for establishing a relationship with tip amount column, it is necessary that the tip amount should be equal to or greater than one and so is the total amount.
+
+```{r}
+tipamount <- records_df %>% filter(tip_amount >= 1)
+totalamount<- records_df %>% filter(total_amount >= 1)
+head(tipamount)
+head(totalamount)
+```
+
+Also, there are multiple rules in which the count of passenger is zero. That does not contribute to the tip amount and thus the count of passenger traveling should be at least one or more than one passenger traveling so that the tip amount can be given. 
+
+```{r}
+passengercount <- records_df %>% filter(passenger_count >= 1)
+head(passengercount)
+```
+
+Following are the line graphs which indicate the relationship of different columns such as total amount passenger count and type of payment to the tip amount. 
+
+```{r}
+ggplot(records_df, aes(total_amount, tip_amount)) + geom_line(color = "red")
+ggplot(records_df, aes(passenger_count, tip_amount)) + geom_line(color = "blue")
+ggplot(records_df, aes(payment_type, tip_amount)) + geom_line(color = "green") + labs( x = "Payment methods ( 1 = Credit card, 2 = Cash, 3 = No charge, 4 = Dispute, 5 = Unknown )", y = "Count of passengers")
+```
+
+When it comes to the total amount, avoiding relationship can be seen but as the total amount increases, the tip amount also increases at the range of around 500-600 dollars. When it comes to the mode of payments, the maximum number of people prefer to give the tip through their credit card.
+
+Here, I removed three columns from the data frame. The reason for removing the ehail fee column is because it possess all the NA values and does not contribute to the dataset. Since ehail_fee has all the NA values, therefore they won't contribute to the tip amount.
+
+```{r}
+records_df1 <-records_df %>% select(-lpep_pickup_datetime,-lpep_dropoff_datetime,-ehail_fee)
+```
+
+```{r}
+head(records_df1)
+```
+
+•Feature engineering:I created a new feature and analyzed its effect on the target variable (e.g.the tip amount). I also ensured to calculate the correlation coefficient and also use visualizations to support my analysis. Then, I summarized my findings and determined if the new feature is a good indicator to predict the tip amount. 
+
+Then, I constructed a new feature called total_per_passenger. Using the total_amount and passenger_count variables, I created a new column called PerPassenger in my dataframe and mutated it to contain the values for total_amount/passenger_count (since this would technically be the total amount paid per passenger if there were to be more than one, this is split evenly between them). I wanted to see if the amount individual passengers had to pay influenced the tip amount. I graphed the correlation and then also calculated the Pearson correlation coefficient. I made sure to deal with Inf values, as well, just replacing them with 0 as there weren't too many, though even the existence of merely a few would impact the correlation coefficient calculation, producing an NaN variable. After doing this, I was able to run my cor() test, and got a Pearson's coefficient of 0.48. Being that this is only between a weak-moderate association, I determined that this new feature is not a good indicator to predict the tip amount, and did not deem it necessary to add to my model. A Pearson coefficient closer to 1 would have allowed me to justify including this variable to my model, but a coefficient of 0.48 only indicates 48% of the variance in tip_amount to be accounted for by PerPassenger. 
+
+```{r}
+
+total_per_passenger <- records_df1 %>% rowwise() %>%
+  mutate(PerPassenger = total_amount/passenger_count )
+
+total_per_passenger_rem_inf <- do.call(data.frame, lapply(total_per_passenger, function(x) {
+  replace(x, is.infinite(x) | is.na(x), 0)
+  })
+)
+
+ggplot(total_per_passenger_rem_inf, aes(PerPassenger, tip_amount)) + geom_line(color = "red")
+
+cor(total_per_passenger_rem_inf$PerPassenger, total_per_passenger_rem_inf$tip_amount, method = "pearson", use = "complete.obs")
+```
+
+
+
+#CRISP-DM: Data Preparation  • I prepared the data for the modeling phase and handled any issues that were identified during the exploratory data analysis. Then, I did:
+•Preprocessing of the data: to handle missing data and outliers, performed any suitable data transformation steps, etc. Also, ensured to filter the data. The goal is to predict the tip amount, therefore I ensured to extract the data that contains this information. 
+•Normalized the data: Then, I performed either max-min normalization or z-score standardization on the continuous variables/features. 
+•Encoding of the data: To determine if there are any categorical variables that need to be encoded and perform the encoding.
+•Prepared the data for modeling: To shuffle the data and split it into training and test sets. 
+
+
+```{r}
+head(records_df1)
+```
+
+•Preprocessed the data: To handle missing data and outliers. Also, I ensured to filter the data. The goal is to predict the tip amount, therefore I ensured to extract the data that contains this information.
+
+Here, I calculated the mean for numerical values and mode for categorical variables to remove all the NA values present in the data set.
+
+```{r}
+records <- as.data.frame(records_df1)
+Mode <- function (x, na.rm) {
+    xtab <- table(x)
+    xmode <- names(which(xtab == max(xtab)))
+    if (length(xmode) > 1) xmode <- ">1 mode"
+    return(xmode)
+}
+
+
+for(var in 1:ncol(records)) {
+  if (class(records[, var]) %in% c("numeric", "integer")) {
+    records[is.na(records[,var]), var] <- mean(records[, var], na.rm = TRUE)
+  } else if (class(records[,var]) == "character") {
+        records[is.na(records[,var]),var] <- Mode(records[,var], na.rm = TRUE)
+  }
+}
+head(records)
+dim(records)
+```
+
+The removed any values can be verified below:
+
+```{r}
+colSums(is.na(records))
+```
+
+After removing all the NA values from the data set, I removed the outliers for tip amount column as it is the major column that is concerned for this practicum. After removing the outliers which are having a z score of greater than three, a total of 3,748 values were removed which are present in the form of outliers in the data frame. 
+
+```{r}
+x <- records$tip_amount
+mean_score <- mean(x)
+standard_deviation <- sd(x)
+z <-(mean_score - x)/standard_deviation
+z <-abs(z)
+o <-which(z>3)
+```
+
+```{r}
+records_z <- records %>%
+  mutate(zscore = abs(z)) %>%
+  filter(zscore<3)
+dim(records_z)
+```
+
+After removing the outliers, I encoded the data by using the dummy variables for different columns such as vendor ID, Rate code ID, store and fwd flag, payment type and trip type columns. 
+
+```{r}
+records_z$VendorID1<-ifelse(records_z$VendorID==1,1,0)
+records_z$VendorID2<-ifelse(records_z$VendorID==2,1,0)
+```
+
+```{r}
+records_z$RateCodeID1<-ifelse(records_z$RatecodeID==1,1,0)
+records_z$RateCodeID2<-ifelse(records_z$RatecodeID==2,1,0)
+records_z$RateCodeID3<-ifelse(records_z$RatecodeID==3,1,0)
+records_z$RateCodeID4<-ifelse(records_z$RatecodeID==4,1,0)
+records_z$RateCodeID5<-ifelse(records_z$RatecodeID==5,1,0)
+records_z$RateCodeID6<-ifelse(records_z$RatecodeID==6,1,0)
+```
+
+```{r}
+records_z$store_and_fwd_flagY<-ifelse(records_z$store_and_fwd_flag=="Y",1,0)
+records_z$store_and_fwd_flagN<-ifelse(records_z$store_and_fwd_flag=="N",1,0)
+```
+
+```{r}
+# Convert payment type to dummies variables
+records_z$payment_type1<-ifelse(records_z$payment_type==1,1,0)
+records_z$payment_type2<-ifelse(records_z$payment_type==2,1,0)
+records_z$payment_type3<-ifelse(records_z$payment_type==3,1,0)
+records_z$payment_type4<-ifelse(records_z$payment_type==4,1,0)
+records_z$payment_type5<-ifelse(records_z$payment_type==5,1,0)
+```
+
+```{r}
+records_z$trip_type1<-ifelse(records_z$trip_type==1,1,0)
+records_z$trip_type2<-ifelse(records_z$trip_type==2,1,0)
+```
+
+•Normalize the data: perform either max-min normalization or z-score standardization on the continuous variables/features.
+
+```{r}
+min_max_norm <- function(x) {
+    (x - min(x)) / (max(x) - min(x))
+  }
+records_norm <- as.data.frame(lapply(records_z[4:43], min_max_norm))
+records_DF <- records_norm %>% select(-payment_type, -trip_type)
+head(records_DF)
+```
+
+In the above R chunk, I performed the normalization of data i.e., maximum normalization. 
+
+Finally I performed the splitting of the data set in the ratio of 80:20 where 80% of the data represents the training set and the remaining 20% represents the test set. The number of rows for the training set data is 315907 and of test set is 78977. The reason for picking 80:20 split is that it is based on Pareto Principle which asserts that 80% of outcomes (or outputs) result from 20% of all causes (or inputs) for any given event. Also, as the data in the testing set already contains known values for the attribute that one wants to predict, it is easy to determine whether the model's guesses are correct. Thus, the training data set is given 80% of the weightage.
+
+```{r}
+set.seed(3)
+train.size <- 0.8
+train.index <- sample.int(nrow(records_DF), round(nrow(records_DF) * train.size))
+records.train <- records_DF[train.index,]
+records.test <- records_DF[-train.index,]
+nrow(records.train)
+nrow(records.test)
+```
+
+
+
+CRISP-DM: Modeling. In this step I developed the k-nn regression model. I also created a function with the following name and arguments: knn.predict(data_train, data_test, k); data_train represents the observations in the training set, data_test represents the observations from the test set, and k is the selected value of k (i.e. the number of neighbors). Then, I implemented the k-nn algorithm and used it to predict the tip amount for each observation in the test set i.e. data_test.  Therefore, this step also involved providing the training set, the test set, and the value of k to my chosen k-nn library. Also, I calculated the mean squared error (MSE) between the predictions from the k-nn model and the actual tip amount in the test set. The knn-predict() function should return the MSE.
+
+
+I first created a function to calculate the MSE called mse(), which is indicative of how close a regression line is to a set of points. It does this by taking the distances from the points to the regression line (these distances are the “errors”) and squaring them.  The lower the MSE, the better the forecast. Then, I constructed the knn.predict() function. This function takes in 3 arguments: data_train, data_test, and a k value. I also used the FNN::knn.reg() function under a 'pred' variable to implement the k-nearest neighbor regression, which took in arguments for 'train', which is matrix or data frame of training set cases, as well as 'test' which matrix or data frame of test set cases, and 'y' which is the reponse of each observation in the training set. For the 'k' argument, I just made it equal to the value of k itself. The 'act' variable in the function is the tip_amount from the test set. Then, I ran the aforementioned mse() function on this to calculate the MSE of the prediction versus the actual. To test out the functionality of knn.predict(), I implemented it with a k value of 4. This ran and produced an output of 0.0004427481, which is the MSE when k=4. This is an extremely small MSE, and the smaller the MSE, the closer one is to finding the line of best fit. Hence, I can conclude that our model is a very good predictor of tip_amount. 
+```{r}
+mse = function(actual, predicted) {
+  (mean((actual - predicted) ^ 2))
+}
+
+knn.predict = function(data_train, data_test, k) {
+  pred = FNN::knn.reg(train = data_train, 
+                      test = data_test, 
+                      y = records.train$tip_amount, k = k)$pred
+  act  = records.test$tip_amount
+  mse(predicted = pred, actual = act)
+}
+
+k = 4
+knn.predict(records.train, records.test, k)
+```
+
+
+
+
+CRISP-DM: Evaluation. To determine the best value of k and visualize the MSE. This step requires selecting different values of k and evaluating which produced the lowest MSE. I also provided at least 20 different values of k to the knn.predict() function (along with the training set and the test set). Then, I used a loop to call knn.predict() 20 times and in each iteration of the loop, and provided a different value of k to knn.predict(). Later, I ensured that I saved the MSE that’s returned. Later, I created a line chart and plotted each value of k on the x-axis and the corresponding MSE on the y-axis. Then, I explained the chart and determined which value of k is more suitable and why. 
+
+In order to determine the best value of k and visualize the MSE, I chose to feed in k=1:20 to a for loop and print the output to a ggplot. Then, I started by calling a variable n_iterations = 20, and then initialized an empty vector to store the error values. Within the for loop, I added the knn.predict() function from above and put in the taxi training set, test set, and value of k = i for the arguments. Then, I plotted these errors to a line graph to visualize the distribution of error based on k value. As it can be seen in the plot, a k value of 2 produced the lowest MSE, and hence is the best predictor of the model. Then, as k increases, the error also experiences a gradual increase in value. As the lower the MSE, the better the forecast. An MSE of 0.0004869058, which is the MSE for k = 2, is extremely low and hence indicates a very accurate predictor model. Hence, I would advocate for the use of the model to predict tip_amount, being that the MSE is significantly nominal and extremely close to 0, which is the ideal MSE. 
+
+```{r}
+n_iterations =  20
+
+errors = c()
+
+for(i in 1:n_iterations){
+  prediction = knn.predict(records.train, records.test, k = i)
+  errors[i] = prediction
+  if(i%%10==0){print(i)}
+}
+
+error = data.frame(k = c(1:n_iterations), error = errors)
+
+error %>%
+  ggplot(aes(k,error)) + geom_line(color = "green") +
+  geom_vline(xintercept = 4, linetype = 'dashed', color = "orange") +
+  theme_minimal() +
+  scale_x_continuous(breaks = seq(0,n_iterations,2)) +
+  labs(title = 'MSE evolution for different values of k',
+       subtitle = 'kNN'
+       )
+
+k = 2
+knn.predict(records.train, records.test, k)
+
+
+```
+
+
+
+Later, I created a compelling visualization that tells an informative story about one aspect of the dataset Then, I created another visualization that tells an informative storyabout how these cabs are used.
+
+First, I installed and accessed the necessary packages, lubridate, ggplot2, and scales.  Then, I decided that I wanted to understand what hours of the day were most busy for taxi drivers and see if it was intuitive as to why certain hours were more busy than others.  In order to understand this, I used the hour() function and extracted the hour of the day from the "lpep_pickup_datetime" column of the data set.  I also applied as.data.frame() and added this information to a data frame called "hourOfDay".  Next, I used the table() function and again applied as.data.frame() to create a data frame called "hours_total_count" to create a data frame with the frequency of taxis used for each hour of the day.  The final step was to visualize this data and I created a graph called "hoursOfDayGraph" using ggplot() and geom_line() and geom_point().  My graph has the hour of the day on the x-axis and the frequency of taxis called for each hour on the y-axis.  I also added a title, a caption, and color to the graph.
+Then, I found that peak taxi use happened at 6pm and then begin to steadily decline until 5am.  6pm makes intuitive sense as the busiest time of the day for taxi drivers as most people would be leaving work for the day.  I was surprised to see there was not some sort of increase or at least a slower decline around dinner time, say from 7pm to 9pm or 10pm, for people going to and returning from dinner.
+
+After 5am the taxi use increases by the hour until 9am, before dipping slightly until noon.  This makes sense again as people are going to work gradually beginning around 6am and peaking around 9am, then the number of commuters begins to decline again.  After noon the frequency of taxi use again increases steadily until the peak at 6pm.  This was slightly surprising to us because I did not expect certain hours in the early afternoon, say from 1pm to 3pm, to be very busy.  Maybe these taxi users are going to and from lunch and by 4pm some people begin to leave work.
+
+It would be interesting to see how the graphs would differ if I counted the taxi use by hour for each day of the week.  I suspect that Monday through Thursday would look very similar as it is the work week.  On Friday taxi use would increase in the later hours as people are going out.  Saturday would have high taxi use very early in the morning from people returning from a night out on Friday, and would continue to have high use throughout the day and night as people are going places on the weekend.  Sunday would have high taxi use very early in the morning again from people returning form a night out on Saturday, and would continue throughout the day before dropping off in the evening as people prepare for work the following day.  This is what I would expect to see.
+
+```{r}
+hourOfDay <- as.data.frame(hour(records_df$lpep_pickup_datetime))
+
+hours_total_count <- as.data.frame(table(hourOfDay$`hour(records_df$lpep_pickup_datetime)`))
+
+str(hours_total_count)
+
+hoursOfDayGraph = ggplot(hours_total_count, aes(x = Var1, y = Freq),) + geom_line(group = 1, color = "steelblue") + geom_point(color = "red") + labs(title = "Number of Taxis by Hours", x = "Hour of the Day", y = "Count", caption = "The graph reprensents the number of taxis used for each hour of the day") + scale_y_continuous(labels = comma)
+
+hoursOfDayGraph
+```
+
+THANK YOU
